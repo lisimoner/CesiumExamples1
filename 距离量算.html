@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>距离量算</title>
+    <!--<link rel="stylesheet" href="./Cesium/Build/CesiumUnminified/Widgets/widgets.css">
+<script src="./Cesium/Build/Cesium/Cesium.js"></script>-->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+    <script src="./Cesium/extend/viewerCesiumNavigationMixin.min.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+        .distanceMes{
+            position: absolute;
+            z-index: 10;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer">
+    <button onclick="drawLine()" class="distanceMes">测距</button>
+</div>
+<script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5Y2NhYWVkNy1kOGMzLTQ2YTItYjMxMy1hZjg5NmJiNmJhOTIiLCJpZCI6NTA3Mywic2NvcGVzIjpbImFzciIsImdjIl0sImlhdCI6MTU0MjMzNjA1N30.NwpjlfR9USx2Vb4ynQQ8_BsHRR8zaEcOyyi46C0YggU";
+    const viewer = new Cesium.Viewer('cesiumContainer',{
+        terrainProvider : new Cesium.ArcGISTiledElevationTerrainProvider({
+            url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+        }),
+        animation: false,
+        timeline:false,
+        sceneModePicker:true,
+        baseLayerPicker:false,
+        navigationHelpButton:false,
+        infoBox:false,
+        fullscreenButton:false,
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+    viewer.scene.globe.enableLighting = true;
+    viewer.shadow = true;
+    let layers = viewer.scene.imageryLayers;
+    viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(113.309, 25.8790, 80000), new Cesium.Cartesian3(5000.0, 5000.0, 5000.0));
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    var scene = viewer.scene;
+    var camera = viewer.camera;
+    viewer.screenSpaceEventHandler.setInputAction(function () {
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);//初始化双击事件
+
+    var handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标事件
+    var closeHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标关闭事件
+    var cacheMeasureDisGroup = [];//测距缓存数组
+    var mdPath = null;// 线
+    var closePanel = null;//关闭标签X
+
+    function measureLine() {
+        var cachePoints = [];//存放点
+        var nowLength = 0;//定义长度
+        mdPath = viewer.entities.add({
+            name: "keyPoints",
+            polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray([0, 0, 0, 0]),
+                width: 3,
+                material: Cesium.Color.RED.withAlpha(0.9),
+            }
+        });
+        var detectDisArr = [];
+        var disArr = [];
+        //左键单击事件
+        handler.setInputAction(function (evt) {
+            if(evt){
+                var lonLat = getLonLat(evt.position);
+                if (detectDisArr.length === 2) {
+                    detectDisArr.splice(0, 1);
+                }
+                detectDisArr.push(lonLat);
+
+                var redEllipse = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(lonLat.lon, lonLat.lat, 300),
+                    name: 'keyPoints',
+                    label: {
+                        font: '14px Helvetica',
+                        pixelOffset: new Cesium.Cartesian2(0, -20)
+                    },
+                    billboard: {
+                        width: 8, // default: undefined
+                        height: 8, // default: undefined
+                    },
+                });
+                if (detectDisArr.length === 1) {
+                    redEllipse.label.text = '起点';
+                } else {
+                    var from = turf.point([detectDisArr[0].lon, detectDisArr[0].lat]);
+                    var to = turf.point([detectDisArr[1].lon, detectDisArr[1].lat]);
+                    var distance = turf.distance(from, to, { units: 'kilometers' });
+                    distance = Math.round(distance * 1000);
+                    var fullDis = 0;
+                    disArr.push(distance);
+                    for (var i = 0; i < disArr.length; i++) {
+                        fullDis += disArr[i];
+                    }
+                    redEllipse.label.text = fullDis + '米';
+                    //console.log(disArr);
+                }
+                redEllipse.label.showBackground = true;
+                cacheMeasureDisGroup.push(redEllipse);
+
+                //绘制线
+                cachePoints.push(lonLat.lon);
+                cachePoints.push(lonLat.lat);
+                cachePoints.push(300);
+                nowLength = cachePoints.length;
+                handler.mouseEmulationIgnoreMilliseconds = 0;
+
+                //鼠标移动事件
+                handler.setInputAction(function (evt) {
+                    var cachePoints2 = cachePoints.concat();
+                    var longitudeString = getLonLat(evt.endPosition).lon;
+                    var latitudeString = getLonLat(evt.endPosition).lat;
+                    let height = getLonLat(evt.endPosition).height;
+                    cachePoints2.push(longitudeString);
+                    cachePoints2.push(latitudeString);
+                    cachePoints2.push(height);
+                    //cachePoints2.push(300);
+                    //console.log(cachePoints2);
+                    mdPath.polyline.positions = new Cesium.CallbackProperty(function () {
+                        return Cesium.Cartesian3.fromDegreesArrayHeights(cachePoints2);
+                    }, false);
+                    viewer.scene.requestRender();
+                }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)//鼠标移动事件
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);//左键单击事件
+        //鼠标双击事件
+        handler.setInputAction(function (evt) {
+            if(evt){
+                //关闭标签实体
+                closePanel = viewer.entities.add({
+                    position: Cesium.Cartesian3.fromDegrees(getLonLat(evt.position).lon, getLonLat(evt.position).lat, 100),
+                    name: 'X',
+                    id: 'closeMD',
+                    label: {
+                        font: '20px Helvetica',
+                        text: 'X',
+                        color: Cesium.Color.RED,
+                        pixelOffset: new Cesium.Cartesian2(-15, 0),
+                        showBackground: true,
+                    }
+                });
+
+                //mouseover
+                closeHandler.setInputAction(function (evt) {
+                    var pickedObject = scene.pick(evt.position);
+                    if (Cesium.defined(pickedObject) && (pickedObject.id === closePanel)) {
+                        clearMD();
+                        closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                    }
+                }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+                //事件清除
+                handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+                handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);//鼠标双击事件
+    }
+
+    function resetMap() {
+        //清除测距
+        clearMD();
+    }
+    function clearMD() {
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+        closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        //删除图元
+        for (var i = 0; i < cacheMeasureDisGroup.length; i++) {
+            viewer.entities.remove(cacheMeasureDisGroup[i]);
+        }
+        cacheMeasureDisGroup = [];
+        // console.log(mdPath);
+        viewer.entities.remove(mdPath);
+        viewer.entities.remove(closePanel);
+    }
+    function getLonLat(position) {
+
+        let ray=viewer.camera.getPickRay(position);
+        let cartesian=viewer.scene.globe.pick(ray,viewer.scene);
+        if(cartesian){
+            let cartographic=Cesium.Cartographic.fromCartesian(cartesian);
+            //将弧度转换为度的十进制表示
+            let longitudeString=Cesium.Math.toDegrees(cartographic.longitude);
+            let latitudeString=Cesium.Math.toDegrees(cartographic.latitude);
+            //获取海拔高度
+            let height = cartographic.height;
+            return { lon: longitudeString, lat: latitudeString, height:height };
+        }
+/*        //得到当前三维场景的椭球体
+        var ellipsoid = scene.globe.ellipsoid;
+        //cartesian=viewer.scene.pickPosition(position,ellipsoid);
+        var cartesian = viewer.camera.pickEllipsoid(position, ellipsoid);
+        if(cartesian){
+            var cartographic = ellipsoid.cartesianToCartographic(cartesian);
+            //将弧度转为度的十进制度表示
+            var longitudeString = Cesium.Math.toDegrees(cartographic.longitude);
+            var latitudeString = Cesium.Math.toDegrees(cartographic.latitude);
+            let height = cartographic.height;
+            return { lon: longitudeString, lat: latitudeString, height:height };
+        }*/
+    }
+
+    //点击测距事件
+    function drawLine(){
+        resetMap();
+        measureLine();
+        //getLonLat();
+    }
+
+    //加载视图控件
+    viewer.extend(Cesium.viewerCesiumNavigationMixin, {});
+</script>
+<!--<script src="./Cesium/JS/tianditu.js"></script>-->
+<script src="./Cesium/extend/mouseGetValue.js"></script>
+</body>
+</html>

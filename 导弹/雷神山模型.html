@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>模型加载</title>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <script src="../Cesium/extend/viewerCesiumNavigationMixin.min.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5Y2NhYWVkNy1kOGMzLTQ2YTItYjMxMy1hZjg5NmJiNmJhOTIiLCJpZCI6NTA3Mywic2NvcGVzIjpbImFzciIsImdjIl0sImlhdCI6MTU0MjMzNjA1N30.NwpjlfR9USx2Vb4ynQQ8_BsHRR8zaEcOyyi46C0YggU";
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider : new Cesium.ArcGISTiledElevationTerrainProvider({
+            url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+        }),
+        animation: false,
+        timeline:false,
+        sceneModePicker:true,
+        baseLayerPicker:false,
+        navigationHelpButton:false,
+        infoBox:false,
+        fullscreenButton:false,
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+
+    var url = './models/leishenhillgltf_0.glb';
+    var entity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(114.285081, 30.429209, 100),
+        model: {
+            uri: url,
+            // 模型最小刻度
+            minimumPixelSize: 64,
+            // 模型最大刻度
+            maximumSize: 1280,
+            // 模型是否可见
+            show: true,
+            // 模型轮廓颜色
+            silhouetteColor:Cesium.Color.WHITE,
+            // 模型轮廓大小，单位px
+            silhouetteSize:500,
+            // 模型颜色
+            //color: Cesium.Color.CORAL
+        },
+    });
+    viewer.trackedEntity = entity;
+    viewer.zoomTo(entity);
+    viewer.homeButton.viewModel.command.beforeExecute.addEventListener(function(e){
+        e.cancel=true;
+        viewer.zoomTo(entity);
+    });
+    const layers = viewer.scene.imageryLayers;
+</script>
+<!--<script src="../Cesium/JS/tianditu.js"></script>-->
+<script src="../Cesium/extend/mouseGetValue.js"></script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>面积量算</title>
+    <!--<link rel="stylesheet" href="./Cesium/Build/CesiumUnminified/Widgets/widgets.css">
+<script src="./Cesium/Build/Cesium/Cesium.js"></script>-->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+    <script src="./Cesium/extend/viewerCesiumNavigationMixin.min.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+        .distanceMes{
+            position: absolute;
+            z-index: 10;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer">
+    <button onclick="drawPolygon()" class="distanceMes">测面</button>
+</div>
+<script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5Y2NhYWVkNy1kOGMzLTQ2YTItYjMxMy1hZjg5NmJiNmJhOTIiLCJpZCI6NTA3Mywic2NvcGVzIjpbImFzciIsImdjIl0sImlhdCI6MTU0MjMzNjA1N30.NwpjlfR9USx2Vb4ynQQ8_BsHRR8zaEcOyyi46C0YggU";
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider: new Cesium.ArcGISTiledElevationTerrainProvider({
+            url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+        }),
+        animation: false,
+        timeline:false,
+        sceneModePicker:true,
+        baseLayerPicker:false,
+        navigationHelpButton:false,
+        infoBox:false,
+        fullscreenButton:false,
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+    viewer.scene.globe.enableLighting = true;
+    viewer.shadow = true;
+    let layers = viewer.scene.imageryLayers;
+    viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(113.309, 25.8790, 80000), new Cesium.Cartesian3(5000.0, 5000.0, 5000.0));
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    var scene = viewer.scene;
+    var camera = viewer.camera;
+    viewer.screenSpaceEventHandler.setInputAction(function () {
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);//初始化双击事件
+
+    var handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标事件
+    var closeHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标关闭事件
+    var cacheMeasureAreaGroup = [];//测面缓存组
+    var cacheMeasureDisGroup = [];//测距缓存数组
+    var mdPath = null;// 线
+    var closePanel = null;//关闭标签X
+    var maPath, area, displayArea;
+    var measureAreaHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    function startMeasureArea() {
+        var cachePoints = [];
+        maPath = viewer.entities.add({
+            name: 'Red line on terrain',
+            polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray([0, 0, 0, 4000]),
+                width: 2,
+                height:4000,
+                material: Cesium.Color.RED.withAlpha(0.1),
+                // clampToGround : true
+            }
+        });
+        area = viewer.entities.add({
+            name: 'Red polygon on surface',
+            polygon: {
+                hierarchy: Cesium.Cartesian3.fromDegreesArray([0, 0,
+                    0, 0,
+                    0, 0,
+                    0, 0,
+                    0, 0]),
+                material: Cesium.Color.RED.withAlpha(0.2),
+                height: 2000,
+                //heightReference:Cesium.HeightReference.CLAMP_TO_GROUND,
+                outline: true, // height is required for outline to display
+                outlineColor: Cesium.Color.RED.withAlpha(0.5),
+            }
+        });
+
+        //鼠标左键单击事件
+        measureAreaHandler.setInputAction(function (evt) {
+            var lonLat = getLonLat(evt.position);
+            cacheMeasureAreaGroup.push(lonLat.lon, lonLat.lat);
+
+            area.polygon.hierarchy = new Cesium.Cartesian3.fromDegreesArray(cacheMeasureAreaGroup);
+            //绘制线
+            cachePoints.push(lonLat.lon);
+            cachePoints.push(lonLat.lat);
+            //measureAreaHandler.mouseEmulationIgnoreMilliseconds = 0;
+
+            // 鼠标移动事件
+            measureAreaHandler.setInputAction(function (evt) {
+                var cachePoints2 = cachePoints.concat();
+                var longitudeString = getLonLat(evt.endPosition).lon;
+                var latitudeString = getLonLat(evt.endPosition).lat;
+                cachePoints2.push(longitudeString);
+                cachePoints2.push(latitudeString);
+                maPath.polyline.positions = new Cesium.CallbackProperty(function () {
+                    return Cesium.Cartesian3.fromDegreesArray(cachePoints2);
+                }, false);
+                    viewer.scene.requestRender();
+
+            }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);// 鼠标移动事件
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);//鼠标左键单击事件
+
+        measureAreaHandler.setInputAction(function (evt) {
+            closePanel = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(getLonLat(evt.position).lon, getLonLat(evt.position).lat, 2000),
+                name: 'X',
+                id: 'closeMD',
+                label: {
+                    font: '12px Helvetica',
+                    text: 'X',
+                    pixelOffset: new Cesium.Cartesian2(0, -10),
+                    showBackground: true,
+                }
+            });
+
+            //mouseover
+            closeHandler.setInputAction(function (evt) {
+                var pickedObject = scene.pick(evt.position);
+                if (Cesium.defined(pickedObject) && (pickedObject.id === closePanel)) {
+                    clearAD();
+                    closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                }
+            }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+            var points = [];
+            var areaPoints = [];
+            for (var i = 0; i < cacheMeasureAreaGroup.length; i++) {
+                if (i % 2 === 0 || i === 0) {
+                    points.push(turf.point([cacheMeasureAreaGroup[i], cacheMeasureAreaGroup[i + 1]]));
+                    areaPoints.push([cacheMeasureAreaGroup[i], cacheMeasureAreaGroup[i + 1]]);
+                }
+            }
+            areaPoints.push(areaPoints[0]);
+
+            var features = turf.featureCollection(points);
+            var centerLon = turf.center(features).geometry.coordinates[0];
+            var centerLat = turf.center(features).geometry.coordinates[1];
+
+            displayArea = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(centerLon, centerLat, 2500),
+                name: 'maCenter',
+                id: 'maCenter',
+                label: {
+                    font: '12px Helvetica',
+                    text: 'X',
+                    pixelOffset:new Cesium.Cartesian2(0, 0),
+                    showBackground: true,
+                }
+            });
+
+            // console.log(cacheMeasureAreaGroup,areaPoints);
+            var polygon = turf.polygon([areaPoints]);
+
+            var area = turf.area(polygon);
+            displayArea.label.text = Math.round(area) + '平方米';
+
+            measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+            measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+            measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+        }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+    }
+    /**
+     *
+     * 删除测面
+     *
+     **/
+    function clearAD() {
+        measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        measureAreaHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+        closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        //删除图元
+        cacheMeasureAreaGroup = [];
+        viewer.entities.remove(maPath);
+        viewer.entities.remove(area);
+        viewer.entities.remove(closePanel);
+        viewer.entities.remove(displayArea);
+    }
+
+    function getLonLat(position) {
+        let ray=viewer.camera.getPickRay(position);
+        let cartesian=viewer.scene.globe.pick(ray,viewer.scene);
+        if(cartesian){
+            let cartographic=Cesium.Cartographic.fromCartesian(cartesian);
+            //将弧度转换为度的十进制表示
+            let longitudeString=Cesium.Math.toDegrees(cartographic.longitude);
+            let latitudeString=Cesium.Math.toDegrees(cartographic.latitude);
+            //获取海拔高度
+            let height = cartographic.height;
+            return { lon: longitudeString, lat: latitudeString, height:height };
+        }
+    }
+
+    //重置功能
+    function resetMap() {
+        //清除测距
+        //clearMD();
+        //清除测面
+        clearAD();
+    }
+
+    /*function clearMD() {
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+        closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        //删除图元
+        for (var i = 0; i < cacheMeasureDisGroup.length; i++) {
+            viewer.entities.remove(cacheMeasureDisGroup[i]);
+        }
+        cacheMeasureDisGroup = [];
+        // console.log(mdPath);
+        viewer.entities.remove(mdPath);
+        viewer.entities.remove(closePanel);
+    }*/
+
+    //测面点击事件
+    function drawPolygon() {
+        resetMap();
+        startMeasureArea();
+        //getLonLat();
+        //event.stopPropagation();
+    }
+</script>
+<!--<script src="./Cesium/JS/tianditu.js"></script>-->
+<script src="./Cesium/extend/mouseGetValue.js"></script>
+</body>
+</html>

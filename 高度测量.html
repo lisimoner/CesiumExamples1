@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>高度量算</title>
+    <!--    <link rel="stylesheet" href="../../Cesium/Build/CesiumUnminified/Widgets/widgets.css">
+    <script src="../../Cesium/Build/Cesium/Cesium.js"></script>-->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="./Cesium/extend/viewerCesiumNavigationMixin.min.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            /*overflow: hidden;*/
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+        .distanceMes{
+            position: absolute;
+            z-index: 10;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer">
+    <button onclick="drawHeight()" class="distanceMes">测高</button>
+</div>
+<script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5Y2NhYWVkNy1kOGMzLTQ2YTItYjMxMy1hZjg5NmJiNmJhOTIiLCJpZCI6NTA3Mywic2NvcGVzIjpbImFzciIsImdjIl0sImlhdCI6MTU0MjMzNjA1N30.NwpjlfR9USx2Vb4ynQQ8_BsHRR8zaEcOyyi46C0YggU";
+    const viewer = new Cesium.Viewer('cesiumContainer',{
+        terrainProvider : new Cesium.ArcGISTiledElevationTerrainProvider({
+            url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+        }),
+        animation: false,
+        timeline:false,
+        sceneModePicker:true,
+        baseLayerPicker:false,
+        navigationHelpButton:false,
+        infoBox:false,
+        fullscreenButton:false,
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+    viewer.scene.globe.enableLighting = true;
+    viewer.shadow = true;
+    const layers = viewer.scene.imageryLayers;
+    viewer.camera.lookAt(Cesium.Cartesian3.fromDegrees(113.309, 25.8790, 80000), new Cesium.Cartesian3(5000.0, 5000.0, 5000.0));
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    const scene = viewer.scene;
+    const camera = viewer.camera;
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标事件
+    const closeHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);//注册鼠标关闭事件
+    let line = null; //存储线
+    const closePanel = null; //关闭标签X
+    const cacheEntities = [];  //存储实体
+
+    function measureHeight(){
+        line = viewer.entities.add({
+          name: 'line',
+          polyline: {
+              positions: Cesium.Cartesian3.fromDegreesArray(
+                  [ 0,0,0,0,]
+              ),
+              width:3,
+              material: Cesium.Color.RED.withAlpha(0.9),
+          }
+        });
+        cacheEntities.push(line);
+        const pointsArr = []; //用于存放点数据
+
+        //左键单击事件
+        handler.setInputAction(function(evt){
+            if(evt){
+                let lonLat = getLonLat(evt.position);
+                pointsArr.push(lonLat);
+                //pointsMove.push(lonLat.lon,lonLat.lat,lonLat.height);
+
+                //handler.mouseEmulationIgnoreMilliseconds = 0;
+
+                handler.setInputAction(function (evt) {
+                    console.log(evt);
+                    console.log(evt.endPosition);
+                    const pointsMove = [pointsArr[0].lon,pointsArr[0].lat,pointsArr[0].height]; //用于存放鼠标移动时的点数据
+                    let lonLat = getLonLat(evt.endPosition);
+                    pointsMove.push(lonLat.lon,lonLat.lat,lonLat.height);
+                    line.polyline.positions = new Cesium.CallbackProperty(function () {
+                        return Cesium.Cartesian3.fromDegreesArrayHeights(pointsMove);
+                    }, false);
+                    viewer.scene.requestRender();
+                },Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+
+                if(pointsArr.length === 2){
+                    console.log(pointsArr);
+                    let midLon = (pointsArr[1].lon + pointsArr[0].lon)/2;
+                    let midLat = (pointsArr[1].lat + pointsArr[0].lat)/2;
+                    let measHeight = Math.abs(pointsArr[1].height - pointsArr[0].height).toFixed(2);
+                    console.log(`高程差为: ${measHeight} 米`);
+                    let displayDis = viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(midLon, midLat, 300),
+                        name: 'keyPoints',
+                        label: {
+                            text: `高程差为: ${measHeight} 米`,
+                            font: '14px Helvetica',
+                            pixelOffset: new Cesium.Cartesian2(0, -20)
+                        },
+                        billboard: {
+                            width: 8, // default: undefined
+                            height: 8, // default: undefined
+                        },
+                    });
+                    //关闭标签实体
+                    const closePanel = viewer.entities.add({
+                       position: Cesium.Cartesian3.fromDegrees(pointsArr[1].lon, pointsArr[1].lat,300),
+                       id:'closeMD',
+                        label:{
+                           font: '20px Helvetica',
+                           text: 'X',
+                           color: Cesium.Color.RED,
+                           pixelOffset: new Cesium.Cartesian2(-15, -20),
+                           showBackground: true,
+                       },
+                    });
+                    cacheEntities.push(displayDis);
+                    cacheEntities.push(closePanel);
+                    line.polyline.positions = new Cesium.CallbackProperty(function () {
+                        return Cesium.Cartesian3.fromDegreesArrayHeights([
+                            pointsArr[0].lon, pointsArr[0].lat, pointsArr[0].height,
+                            pointsArr[1].lon, pointsArr[1].lat, pointsArr[1].height,
+                        ]);
+                    }, false);
+                    viewer.scene.requestRender();
+                    //清除事件
+                    closeHandler.setInputAction(function (evt) {
+                        var pickedObject = scene.pick(evt.position);
+                        if (Cesium.defined(pickedObject) && (pickedObject.id === closePanel)) {
+                            clearMD();
+                            closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                        }
+                    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+                    handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                    handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+                }
+            }
+        },Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }
+
+    function getLonLat(position) {
+        console.log('getLonLat' +position);
+        if(position){
+            let ray=viewer.camera.getPickRay(position);
+            let cartesian=viewer.scene.globe.pick(ray,viewer.scene);
+            let cartographic=Cesium.Cartographic.fromCartesian(cartesian);
+            //将弧度转换为度的十进制表示
+            let longitudeString=Cesium.Math.toDegrees(cartographic.longitude);
+            let latitudeString=Cesium.Math.toDegrees(cartographic.latitude);
+            //获取海拔高度
+            let height = cartographic.height;
+            return { lon: longitudeString, lat: latitudeString, height:height };
+        }
+    }
+
+    //删除线
+    function clearMD(){
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+        closeHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        for(let i = 0; i < cacheEntities.length;i++){
+            viewer.entities.remove(cacheEntities[i]);
+        }
+        cacheEntities.length = 0;
+    }
+
+    function drawHeight(){
+        clearMD();
+        measureHeight();
+    }
+</script>
+<!--<script src="./Cesium/JS/tianditu.js"></script>-->
+<script src="./Cesium/extend/mouseGetValue.js"></script>
+</body>
+</html>

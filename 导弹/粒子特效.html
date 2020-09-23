@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>粒子特效</title>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<script>
+    const viewer = new Cesium.Viewer('cesiumContainer',{
+        fullscreenButton:false,
+        /*timeline:false,
+        animation:false,*/
+        shouldAnimate : true
+    });
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+    const entity = viewer.entities.add({
+        // Load the Cesium plane model to represent the entity
+        model : {
+            uri : './models/launchvehicle.glb',
+            minimumPixelSize : 64
+        },
+        position : Cesium.Cartesian3.fromDegrees(-112.110693, 36.0994841, 1000.0)
+    });
+    viewer.trackedEntity = entity;
+
+    function computeModelMatrix(entity, time) {
+        var position = Cesium.Property.getValueOrUndefined(entity.position, time, new Cesium.Cartesian3());
+        if (!Cesium.defined(position)) {
+            return undefined;
+        }
+        var orientation = Cesium.Property.getValueOrUndefined(entity.orientation, time, new Cesium.Quaternion());
+        if (!Cesium.defined(orientation)) {
+            var modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position, undefined, new Cesium.Matrix4());
+        } else {
+            modelMatrix = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromQuaternion(orientation, new Cesium.Matrix3()), position, new Cesium.Matrix4());
+        }
+        return modelMatrix;
+    }
+    function computeEmitterModelMatrix() {
+        var hpr = Cesium.HeadingPitchRoll.fromDegrees(0.0, 0.0, 0.0, new Cesium.HeadingPitchRoll());
+        var trs = new Cesium.TranslationRotationScale();
+        trs.translation = Cesium.Cartesian3.fromElements(2.5, 4.0, 1.0, new Cesium.Cartesian3());
+        trs.rotation = Cesium.Quaternion.fromHeadingPitchRoll(hpr, new Cesium.Quaternion());
+        return Cesium.Matrix4.fromTranslationRotationScale(trs, new Cesium.Matrix4());
+    }
+    var particleSystem = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+        image : './models/fire.png',
+        startScale : 1.0,
+        endScale : 4.0,
+        particleLife : 1.0,
+        speed : 5.0,
+        imageSize : new Cesium.Cartesian2(20, 20),
+        emissionRate : 5.0,
+        lifetime : 16.0,
+        modelMatrix : computeModelMatrix(entity, Cesium.JulianDate.now()),
+        emitterModelMatrix : computeEmitterModelMatrix()
+    }));
+</script>
+</body>
+</html>

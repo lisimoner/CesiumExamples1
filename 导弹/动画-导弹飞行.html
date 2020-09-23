@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+    <meta name="description" content="CZML Model Articulations">
+    <meta name="cesium-sandcastle-labels" content="CZML">
+    <title>导弹飞行</title>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.69/Build/Cesium/Cesium.js"></script>
+    <script src="../Cesium/extend/viewerCesiumNavigationMixin.min.js"></script>
+    <style>
+        html,body,#cesiumContainer{
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        .cesium-widget-credits{
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<script id="cesium_sandcastle_script">
+var czml = [{
+    "id" : "document",
+    "name" : "CZML Model",
+    "version" : "1.0",
+    "clock" : {
+        "interval" : "2020-05-30T19:30:00Z/2020-05-30T19:53:00Z",
+        "currentTime" : "2020-05-30T19:30:00Z",
+        "multiplier" : 60,
+        "range" : "LOOP_STOP",
+        "step" : "SYSTEM_CLOCK_MULTIPLIER"
+    }
+}, {
+    "id" : "test model",
+    "name" : "Cesium Air",
+    "position" : {
+        "interpolationAlgorithm":"LAGRANGE",
+        "interpolationDegree":1,
+        "epoch":"2020-05-30T19:30:00Z",
+        "cartographicDegrees":[
+            0, 122.000000, 39.000, 100,
+            60, 122.000001, 39.000, 1100,
+            120, 122.000002, 39.000, 2100,
+            180, 122.000003, 39.000, 3100,
+            240, 122.000004, 39.000, 4100,
+            300, 122.000005, 39.000, 5100,
+
+            315, 122.000006, 39.000000, 5100,
+            330, 122.010005, 39.000000, 5100,
+            345, 122.020005, 39.000000, 5100,
+            360, 122.030005, 39.000000, 5100,
+
+            420, 122.050005, 39.000000, 5100,
+            480, 122.150005, 39.000000, 5100,
+            540, 122.250005, 39.000000, 5100,
+            600, 122.350005, 39.000000, 5100,
+            660, 122.450005, 39.000000, 5100,
+            720, 122.550005, 39.000000, 5100,
+            780, 122.650005, 39.000000, 5100,
+            840, 122.750005, 39.000000, 5100,
+            900, 122.850005, 39.000000, 5100,
+
+            960, 122.850006, 39.000000, 4100,
+            1020, 122.850007, 39.000000, 3100,
+            1080, 122.850008, 39.000000, 2100,
+            1140, 122.850009, 39.000000, 1100,
+            1200, 122.850010, 39.000000, 100,
+            1300, 122.850010, 39.000000, 80,
+            1380, 122.850010, 39.000000, 60,
+        ]
+    },
+    "model": {
+        "gltf" : "./models/launchvehicle.glb",
+        "scale" : 2.0,
+        "minimumPixelSize" : 128,
+        "runAnimations" : true,
+        "articulations" : {
+            "Fairing Open" : {
+                "epoch" : "2020-05-30T19:30:00Z",
+                "number" : [
+                    0, 0,
+                    300, 60,
+                    600, 120,
+                    900, 180,
+                    1200,240,
+                ]
+            },
+            "Fairing Separate" : {
+                "epoch" : "2020-05-30T19:30:00Z",
+                "number" : [
+                    0, 0,
+                    300, -25,
+                    600, -50,
+                    900, -75,
+                    1200,-100,
+                ]
+            },
+            "Fairing Drop" : {
+                "epoch" : "2020-05-30T19:30:00Z",
+                "interpolationAlgorithm" : "LAGRANGE",
+                "interpolationDegree" : 2,
+                "number" : [
+                    0, 0,
+                    80, 0,
+                    100, 0,
+                    120, -1,
+                    600, -50,
+                    800, -75,
+                    1000, -100,
+                    1200, -125,
+                ]
+            }
+        }
+    }
+}];
+var viewer = new Cesium.Viewer('cesiumContainer', {
+    fullscreenButton:false,
+    timeline:false,
+    animation:false,
+    shouldAnimate : true
+});
+viewer.scene.globe.depthTestAgainstTerrain = false;
+var dsEntity ;
+var dataSourcePromise = viewer.dataSources.add(Cesium.CzmlDataSource.load(czml));
+
+//导弹落地后的爆炸效果，刚开始设置为不可见
+const particleBomb = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+    show:false,
+    image : './models/fireHeadP.png',
+    imageSize : new Cesium.Cartesian2(50, 50),
+    startScale : 1.0,
+    endScale : 10.0,
+    startColor : Cesium.Color(0.878,0.612,0.0,0.0),
+    endColor : Cesium.Color(0.878,0.612,0.0,1.0),
+    // Particle behavior
+    particleLife : 5.0,
+    speed : 0.001,
+    emitter: new Cesium.BoxEmitter(new Cesium.Cartesian3(10.0, 10.0, 10.0)),
+    //emitter: new Cesium.SphereEmitter(10.0),
+    //emitter: new Cesium.CircleEmitter(5.0),
+    emissionRate : 10.0,
+    bursts : [
+        new Cesium.ParticleBurst({time : 1.0, minimum : 0, maximum : 10}),
+        new Cesium.ParticleBurst({time : 5.0, minimum : 10, maximum : 20}),
+        //new Cesium.ParticleBurst({time : 10.0, minimum : 100, maximum : 150})
+    ],
+    emitterModelMatrix : computeEmitterModelMatrix1(),
+    modelMatrix : Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(122.850010, 39.000000, 90)),
+    lifetime : 0.5,
+    loop:true,
+}));
+function computeEmitterModelMatrix1() {
+    var hpr = Cesium.HeadingPitchRoll.fromDegrees(0.0, 0.0, 0.0, new Cesium.HeadingPitchRoll());
+    var trs = new Cesium.TranslationRotationScale();
+    trs.translation = Cesium.Cartesian3.fromElements(0, 0.0, 0.0, new Cesium.Cartesian3());
+    trs.rotation = Cesium.Quaternion.fromHeadingPitchRoll(hpr, new Cesium.Quaternion());
+    return Cesium.Matrix4.fromTranslationRotationScale(trs, new Cesium.Matrix4());
+}
+
+
+var particleSystem;
+dataSourcePromise.then(function(dataSource){
+    dsEntity = dataSource.entities.getById('test model');
+    //console.log(dsEntity);
+    viewer.trackedEntity = dataSource.entities.getById('test model');
+
+    viewer.trackedEntity.orientation = new Cesium.VelocityOrientationProperty(viewer.trackedEntity.position);
+    if(dsEntity){
+        particleSystem = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+            image : './models/fire.png',
+            startScale : 1.7,
+            endScale : 10.0,
+            particleLife : 0.1,
+            speed : 5.0,
+            imageSize : new Cesium.Cartesian2(12, 12),
+            emitter : new Cesium.BoxEmitter(new Cesium.Cartesian3(25.0, 10.0, 10.0)),
+            //emitter: new Cesium.ConeEmitter(Cesium.Math.toRadians(30.0)),
+            //emitter: new Cesium.SphereEmitter(8.0),
+            emissionRate : 5.0,
+            lifetime : 16.0,
+/*            bursts: [
+                new Cesium.ParticleBurst({
+                    time: 5.0,
+                    minimum: 10,
+                    maximum: 100,
+                }),
+                new Cesium.ParticleBurst({
+                    time: 10.0,
+                    minimum: 50,
+                    maximum: 100,
+                }),
+                new Cesium.ParticleBurst({
+                    time: 15.0,
+                    minimum: 200,
+                    maximum: 300,
+                }),
+            ],*/
+            //modelMatrix : computeModelMatrix(dataSource.entities.getById('test model'), '2020-05-30T19:30:00Z'),
+            emitterModelMatrix : computeEmitterModelMatrix(),
+            updateCallback: applyGravity,
+        }));
+    }
+
+    viewer.scene.preUpdate.addEventListener(function (scene, time) {
+        particleSystem.modelMatrix = computeModelMatrix(dataSource.entities.getById('test model'), time);
+
+        particleSystem.emitterModelMatrix = computeEmitterModelMatrix();
+
+        //判断时间是否超过动画的结束时间，相差5分钟
+        if(viewer.cesiumWidget.clock.currentTime.secondsOfDay >= viewer.cesiumWidget.clock.stopTime.secondsOfDay-180){
+            dsEntity.show = false;
+            particleSystem.show = false;
+            particleBomb.show = true;
+        }else{
+            dsEntity.show = true;
+            particleSystem.show = true;
+            particleBomb.show = false;
+        }
+        //console.log(viewer.cesiumWidget.clock);
+    });
+
+}).otherwise(function(error){
+    console.error(error);
+});
+
+var gravityScratch = new Cesium.Cartesian3();
+function applyGravity(p) {
+    // We need to compute a local up vector for each particle in geocentric space.
+    var position = p.position;
+    Cesium.Cartesian3.normalize(position, gravityScratch);
+    Cesium.Cartesian3.multiplyByScalar(
+        gravityScratch,
+        0,
+        gravityScratch
+    );
+
+    p.velocity = Cesium.Cartesian3.add(
+        p.velocity,
+        gravityScratch,
+        p.velocity
+    );
+}
+
+function computeModelMatrix(entity, time) {
+    var position = Cesium.Property.getValueOrUndefined(entity.position, time, new Cesium.Cartesian3());
+    if (!Cesium.defined(position)) {
+        return undefined;
+    }
+    var orientation = Cesium.Property.getValueOrUndefined(entity.orientation, time, new Cesium.Quaternion());
+    if (!Cesium.defined(orientation)) {
+        var modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position, undefined, new Cesium.Matrix4());
+    } else {
+        modelMatrix = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromQuaternion(orientation, new Cesium.Matrix3()), position, new Cesium.Matrix4());
+    }
+    return modelMatrix;
+}
+
+function computeEmitterModelMatrix() {
+    var hpr = Cesium.HeadingPitchRoll.fromDegrees(0.0, 0.0, 0.0, new Cesium.HeadingPitchRoll());
+    var trs = new Cesium.TranslationRotationScale();
+    trs.translation = Cesium.Cartesian3.fromElements(-68, 0.0, 0.0, new Cesium.Cartesian3());
+    trs.rotation = Cesium.Quaternion.fromHeadingPitchRoll(hpr, new Cesium.Quaternion());
+    return Cesium.Matrix4.fromTranslationRotationScale(trs, new Cesium.Matrix4());
+}
+
+//加载视图控件
+viewer.extend(Cesium.viewerCesiumNavigationMixin, {});
+</script>
+<script src="../Cesium/extend/mouseGetValue.js"></script>
+</body>
+</html>
